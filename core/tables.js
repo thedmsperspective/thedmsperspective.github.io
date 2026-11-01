@@ -211,6 +211,14 @@ export function watchShopRequests(token, id, cb) {
   }).catch(() => {});
   return () => { stopped = true; stops.forEach(f => f()); };
 }
+/** Lore: the DM publishes what's revealed; players watch it. tables/<id>/lore = { meta: { name, sections }, e: { id: entry } } */
+export async function setLore(token, id, v) { const c = await db(token); await c.set(c.ref(c.db, `tables/${id}/lore`), v ?? null); }
+export async function updateLore(token, id, patch) { const c = await db(token); await c.D.update(c.ref(c.db, `tables/${id}/lore`), patch); }
+export function watchLore(token, id, cb) {
+  let stop = null, stopped = false;
+  db(token).then(c => { if (!stopped) stop = c.onValue(c.ref(c.db, `tables/${id}/lore`), s => cb(s.val()), () => cb(null)); }).catch(() => cb(null));
+  return () => { stopped = true; stop?.(); };
+}
 /** DM: answer a request (and clear it). */
 export async function answerShop(token, id, uid, rid, answer) {
   const c = await db(token);
