@@ -51,7 +51,7 @@ export function textHTML(text, inline = escHTML) {
     const top = stack[stack.length - 1];
     if (top && lv > top.level) { close(lv); out += `<br>${inline(body)}`; continue; }
     close(0);
-    out += `<div class="dmp-line"${lv ? ` style="padding-left:${lv * 1.5}em"` : ''}>${inline(body)}</div>`;
+    out += `<div class="dmp-line"${lv ? ` style="text-indent:${lv * 2}em"` : ''}>${inline(body)}</div>`; // first line steps in, as it looks while typing
   }
   close(0);
   return `<div class="dmp-text">${out}</div>`;
