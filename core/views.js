@@ -57,7 +57,9 @@ const SWORDS = ['Greatsword', 'Longsword', 'Rapier', 'Scimitar', 'Shortsword'], 
  */
 export function itemChoices(item) {
   const t = String(item?.type || ''), out = { kind: '', options: [], fixed: '', dmg: false };
-  out.dmg = /resistance to one (?:type of damage|damage type)|one damage type of your choice/i.test(item?.desc || '');
+  // resistance to a damage type left open: said in the text, or a "?" standing for it in the name ("Potion of ? Resistance")
+  out.dmg = /resistance\s+to\s+(?:one|a)\s+(?:type\s+of\s+damage|damage\s+type)|one\s+damage\s+type\s+of\s+your\s+choice|resistance\s+to\s+the\s+damage\s+type\s+(?:chosen|determined)/i.test(item?.desc || '')
+    || (/\?/.test(item?.name || '') && /resist/i.test(item?.name || ''));
   const w = /^\s*weapon\s*\(([^)]*)\)?/i.exec(t), a = /^\s*armor\s*\(([^)]*)\)?/i.exec(t);
   if (w) {
     out.kind = 'weapon';
