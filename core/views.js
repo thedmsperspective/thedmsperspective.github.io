@@ -96,6 +96,9 @@ export const needsChoice = item => { const c = itemChoices(item); return c.optio
 /** The name a chosen copy goes by: "Weapon, +1" with a longsword is "Longsword, +1"; "Flame Tongue (Scimitar)". */
 export function choiceName(name, ch = {}) {
   let n = String(name || ''); const extra = [];
+  // A "?" in the name stands for the choice: "Potion of ? Resistance" + fire → "Potion of Fire Resistance"
+  const cap = w => String(w).replace(/\b\w/g, x => x.toUpperCase());
+  if (n.includes('?') && (ch.dmg || ch.base)) { n = n.replace('?', cap(ch.dmg || ch.base)); if (ch.dmg) ch = { ...ch, dmg: '' }; else ch = { ...ch, base: '' }; }
   if (ch.base) {
     if (/^(weapon|armor|ammunition)(?=,| \+)/i.test(n)) n = n.replace(/^(weapon|armor|ammunition)(?=,| \+)/i, ch.base); // "Armor, +1" → "Chain Mail, +1" (2024: "Weapon +1")
     else if (!n.toLowerCase().includes(ch.base.toLowerCase().replace(/ armor$/, ''))) extra.push(ch.base);
