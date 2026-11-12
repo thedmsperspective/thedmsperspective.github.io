@@ -276,7 +276,7 @@ export async function writeAppdata(token, name, data) {
 /* ---------- campaigns ---------- */
 const emptySuite = () => ({ app: 'dmp-suite', v: 1, campaigns: [], current: { id: '', at: 0 }, settings: {}, clock: {} });
 // Phase 3: table-wide settings (each { v, at }) and each campaign's in-game clock ({ now: minutes, at })
-export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off' }; // pickNext: players pick who goes next from their sheets (Active Initiative): 'off' or the seconds you get to step in // rules as written (edition: '2014' or '2024')
+export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off' }; // monsterSaves: monsters at 0 HP make death saves like players ('on'), or are simply down ('off') // pickNext: players pick who goes next from their sheets (Active Initiative): 'off' or the seconds you get to step in // rules as written (edition: '2014' or '2024')
 const newestOf = (x, y) => ((y?.at || 0) > (x?.at || 0) ? y : x);
 function mergeKeyed(a, b) {
   const out = {};
