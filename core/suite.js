@@ -276,7 +276,14 @@ export async function writeAppdata(token, name, data) {
 /* ---------- campaigns ---------- */
 const emptySuite = () => ({ app: 'dmp-suite', v: 1, campaigns: [], current: { id: '', at: 0 }, settings: {}, clock: {} });
 // Phase 3: table-wide settings (each { v, at }) and each campaign's in-game clock ({ now: minutes, at })
-export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off' }; // monsterSaves: monsters at 0 HP make death saves like players ('on'), or are simply down ('off') // pickNext: players pick who goes next from their sheets (Active Initiative): 'off' or the seconds you get to step in // rules as written (edition: '2014' or '2024')
+export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off', notches: 'off', notchMax: '3,5,7,1,5,9,15,21,4,15' };
+// notches: wear and tear on weapons and armor ('on'/'off'); notchMax: how many notches break an item, in NOTCH_KINDS order
+export const NOTCH_KINDS = ['light', 'medium', 'heavy', 'shield', 'weapon', 'mlight', 'mmedium', 'mheavy', 'mshield', 'mweapon'];
+/** The table's notch limits: { light, medium, heavy, shield, weapon, mlight, … } */
+export function notchLimits(s = tableSettings()) {
+  const v = String(s.notchMax || SETTING_DEFAULTS.notchMax).split(',').map(Number), d = SETTING_DEFAULTS.notchMax.split(',').map(Number);
+  return Object.fromEntries(NOTCH_KINDS.map((k, i) => [k, Number.isFinite(v[i]) && v[i] > 0 ? Math.min(99, Math.floor(v[i])) : d[i]]));
+} // monsterSaves: monsters at 0 HP make death saves like players ('on'), or are simply down ('off') // pickNext: players pick who goes next from their sheets (Active Initiative): 'off' or the seconds you get to step in // rules as written (edition: '2014' or '2024')
 const newestOf = (x, y) => ((y?.at || 0) > (x?.at || 0) ? y : x);
 function mergeKeyed(a, b) {
   const out = {};

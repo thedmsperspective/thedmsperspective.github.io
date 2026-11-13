@@ -155,6 +155,7 @@ footer .bugbtn { margin-top: 10px; }
   .logo { animation: wake 1.6s ease-out both; }
   @keyframes wake { from { opacity: 0; filter: drop-shadow(0 0 0 rgba(247, 148, 29, 0)); } 60% { opacity: 1; } to { filter: drop-shadow(0 0 36px rgba(247, 148, 29, .16)); } }
 }
+.notchtab{border-collapse:collapse}.notchtab th,.notchtab td{padding:3px 6px;text-align:left;font-size:.92em}.notchtab input{width:64px}
 </style>
 </head>
 <body>
@@ -547,14 +548,24 @@ const RULES = [
   ['initiative', 'Initiative', [['standard', 'Standard'], ['active', 'Active Initiative']]],
   ['leveling', 'Leveling', [['xp', 'Experience points'], ['milestone', 'Milestone']]],
   ['monsterSaves', 'Monsters at 0 HP', [['off', 'Are down (the usual rules)'], ['on', 'Make death saves, like players']]],
+  ['notches', 'Notches: weapons and armor wear down and break (natural 1s on attacks, natural 20s against the wearer)', [['off', 'Off'], ['on', 'On']]],
   ['pickNext', 'Players pick who goes next from their sheets (Active Initiative), with time for you to step in', [['off', 'Off'], ['10', '10 seconds'], ['15', '15 seconds'], ['20', '20 seconds']]],
 ];
 function rulesHtml() {
   const s = core.tableSettings ? core.tableSettings() : {};
   return RULES.map(([k, label, opts]) => `<div class="trow"><span class="grow">${label}</span><span class="seg">${opts.map(([v, n]) => `<button type="button" data-rule="${k}" data-v="${v}" aria-pressed="${(s[k] || opts[0][0]) === v}">${n}</button>`).join('')}</span></div>`).join('')
-    + abilHtml(s)
+    + abilHtml(s) + notchHtml(s)
     + '<p>Every app follows these: the Character Sheet, the Bestiary, Session Notes. The first value in each row is the rules as written.</p>';
 }
+// Notch limits: how many notches break each kind of item (shown while Notches is on)
+const NOTCH_ROWS = [['light', 'Light armor'], ['medium', 'Medium armor'], ['heavy', 'Heavy armor'], ['shield', 'Shield'], ['weapon', 'Weapons']];
+const notchHtml = s => {
+  if (s.notches !== 'on' || !core.notchLimits) return '';
+  const n = core.notchLimits(s);
+  return `<div class="trow" style="flex-wrap:wrap;align-items:flex-start"><span class="grow">Notches before it breaks</span>
+    <table class="notchtab"><tr><th></th><th>Non-magical</th><th>Magical</th></tr>${NOTCH_ROWS.map(([k, l]) => `<tr><td>${l}</td><td><input type="number" min="1" max="99" inputmode="numeric" data-notch="${k}" value="${n[k]}" aria-label="${l}, non-magical"></td><td><input type="number" min="1" max="99" inputmode="numeric" data-notch="m${k}" value="${n['m' + k]}" aria-label="${l}, magical"></td></tr>`).join('')}</table></div>
+    <p>A shield takes notches before the armor. At its limit an item breaks: notched items are repaired with <i>mending</i> or tools (30 minutes a notch), broken ones only by a blacksmith (8 hours at least). A broken Common or Uncommon magic item loses its magic; Rare and up go dormant until an Artificer awakens them.</p>`;
+};
 // How new characters set their ability scores: any mix of the three, at least one
 const ABIL_METHODS = [['roll', 'Roll'], ['array', 'Standard array'], ['pointbuy', 'Point buy']];
 const abilOn = s => new Set(String(s.abilMethods || 'roll,array,pointbuy').split(',').filter(Boolean));
@@ -573,6 +584,13 @@ function bindRules(t) {
     }
     const b = e.target.closest('[data-rule]'); if (!b) return;
     try { await core.saveSuite(t, { settings: { [b.dataset.rule]: b.dataset.v } }); el.innerHTML = rulesHtml(); note('Saved. Each app picks it up the next time it syncs.'); }
+    catch (err) { note(`Couldn't save that: ${err.message}`); }
+  };
+  el.onchange = async e => {
+    const inp = e.target.closest('[data-notch]'); if (!inp || !core.notchLimits) return;
+    const n = core.notchLimits(core.tableSettings());
+    n[inp.dataset.notch] = Math.max(1, Math.min(99, Math.floor(Number(inp.value)) || 1));
+    try { await core.saveSuite(t, { settings: { notchMax: core.NOTCH_KINDS.map(k => n[k]).join(',') } }); el.innerHTML = rulesHtml(); note('Saved.'); }
     catch (err) { note(`Couldn't save that: ${err.message}`); }
   };
 }
