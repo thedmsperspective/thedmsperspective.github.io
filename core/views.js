@@ -109,6 +109,18 @@ export function choiceName(name, ch = {}) {
   return extra.length ? `${n} (${extra.join(', ')})` : n;
 }
 
+/* ---------- Consumables: things that are used up (a potion is drunk, a torch burns out) ----------
+   Magic: potions, oils, scrolls, elixirs, philters, dusts and magic ammunition, unless the DM switched it (i.consumable).
+   Mundane: alchemist's fire, acid, antitoxin, holy water, oil, torches, rations, healer's kits and the like. */
+const MAGIC_USED_UP = /^(potion|oil|spell scroll|scroll|elixir|philter|dust|ammunition|arrow|bolt|sling bullet|needle)s?\b/i;
+export function isConsumable(i) {
+  if (!i) return false;
+  if (typeof i.consumable === 'boolean') return i.consumable;
+  return MAGIC_USED_UP.test(String(i.name || '')) || /^\s*(potion|scroll)\b/i.test(String(i.type || '')) || /\bammunition\b/i.test(String(i.type || ''));
+}
+const MUNDANE_USED_UP = /^(alchemist'?s fire|acid|antitoxin|holy water|oil|torch|rations?|healer'?s kit|poison|basic poison|candle|caltrops|ball bearings|potion)\b/i;
+export const consumableName = n => MUNDANE_USED_UP.test(String(n || '').trim()) || MAGIC_USED_UP.test(String(n || '').trim());
+
 /* ---------- Magic Items: what a character holds (never what it's worth) ---------- */
 export const weightLb = w => { const m = /([\d.]+)\s*lb/i.exec(String(w || '')); return m ? Number(m[1]) : 0; };
 export function attuneText(i) {
@@ -139,6 +151,8 @@ export function miView(mi, seed, holder) {
     return {
       cid: x.cid, name: choiceName(i.name, { ...ch, base: ch.base || '' }), base, baseKind: base ? ic.kind : '', type: [i.type, i.rarity].filter(Boolean).join(', '),
       attune: attuneText(i), needsAttune: i.attune?.mode === 'required', attuned: !!x.attuned, desc: i.desc || '', weight: weightLb(i.weight), fx,
+      // used up when used: a stack (×qty), and the uses the Magic Items app has already counted
+      ...(isConsumable(i) ? { consumable: true, qty: Math.max(1, Number(x.qty) || 1), usedIds: (x.usedIds || []).slice(-30) } : {}),
     };
   }).filter(Boolean);
   return { items: list, limit: Number(holder.limit) || 3, held: held.length };
