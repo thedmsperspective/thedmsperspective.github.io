@@ -194,3 +194,4 @@ textarea:not([data-plain]) { tab-size: 6; -moz-tab-size: 6; }
 start();
 if (typeof window !== 'undefined') { window.DMPText = { textHTML, indent, levelOf }; window.dispatchEvent(new Event('dmp-text-ready')); }
 import('/core/columns.js').catch(() => {}); // and every table's columns can be resized
+import('/core/requests.js').catch(() => {}); // and, on the DM's device, players' requests show up in whichever app is open

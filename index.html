@@ -203,6 +203,7 @@ footer .bugbtn { margin-top: 10px; }
 
 <script type="module">
 import * as core from '/core/suite.js';
+import('/core/requests.js').catch(() => {}); // players' requests that need the DM, in whichever app is open
 
 // ---------- the apps (their addresses follow the repository names exactly) ----------
 const GLYPHS = {
@@ -549,6 +550,7 @@ const RULES = [
   ['leveling', 'Leveling', [['xp', 'Experience points'], ['milestone', 'Milestone']]],
   ['monsterSaves', 'Monsters at 0 HP', [['off', 'Are down (the usual rules)'], ['on', 'Make death saves, like players']]],
   ['notches', 'Notches: weapons and armor wear down and break (natural 1s on attacks, natural 20s against the wearer)', [['off', 'Off'], ['on', 'On']]],
+  ['ammo', 'Ammunition: count each piece, or roll an ammunition die that shrinks (Darker Dungeons)', [['count', 'Count each piece'], ['dice', 'Ammunition dice']]],
   ['pickNext', 'Players pick who goes next from their sheets (Active Initiative), with time for you to step in', [['off', 'Off'], ['10', '10 seconds'], ['15', '15 seconds'], ['20', '20 seconds']]],
 ];
 function rulesHtml() {

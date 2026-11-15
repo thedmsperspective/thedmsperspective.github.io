@@ -63,7 +63,7 @@ export function connect() {
       }
       // without a Google account the live link refuses everything; the apps carry on through Drive
       if (!auth.currentUser) await withTimeout(U.signInAnonymously(auth), 15000, 'Connecting to Firebase');
-      fb = { db: D.getDatabase(app), ref: D.ref, set: D.set, onValue: D.onValue, onChildAdded: D.onChildAdded, onChildChanged: D.onChildChanged, D, U, auth };
+      fb = { db: D.getDatabase(app), ref: D.ref, set: D.set, onValue: D.onValue, onChildAdded: D.onChildAdded, onChildChanged: D.onChildChanged, onChildRemoved: D.onChildRemoved, D, U, auth };
       lastError = '';
       log('ready', 'connected to Firebase');
       return fb;
@@ -168,7 +168,7 @@ export function cwatch(key, path, cb) {
  * that's added or changed (never the whole list again). cb(name, value). Returns a stop function.
  * This keeps a busy list (sheet fields, HP changes, channels) from re-downloading everything on each change.
  */
-export function cwatchEach(key, path, cb) {
+export function cwatchEach(key, path, cb, { removed = false } = {}) {
   let stops = [], stopped = false;
   if (okKey(key)) connect().then(c => {
     if (!c || stopped) return;
@@ -181,6 +181,8 @@ export function cwatchEach(key, path, cb) {
     };
     const fail = e => { lastError = e.message; log('FAIL', `watch ${short(key)}…/${path}`, e.message); };
     stops = [c.onChildAdded(r, handle, fail), c.onChildChanged(r, handle, fail)];
+    // removed: also hear an entry going away, as cb(name, null)
+    if (removed && c.onChildRemoved) stops.push(c.onChildRemoved(r, snap => { try { cb(snap.key, null); } catch (e) { console.error(e); } }, fail));
   });
   return () => { stopped = true; stops.forEach(s => s()); };
 }

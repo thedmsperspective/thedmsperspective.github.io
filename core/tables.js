@@ -186,7 +186,7 @@ export function watchShops(token, id, cb) {
   return () => { stopped = true; stop?.(); };
 }
 /** Player: ask to buy or sell. Resolves with the DM's Shops app's answer ({ ok, … } or { error }), or a timeout. */
-export async function shopRequest(token, id, req, wait = 20000) {
+export async function shopRequest(token, id, req, wait = 45000) { // long enough for the DM to open Shops from their request box
   const c = await db(token);
   const rid = rnd(12), ask = c.ref(c.db, `tables/${id}/shopq/${me.uid}/${rid}`), ans = c.ref(c.db, `tables/${id}/shopr/${me.uid}/${rid}`);
   return new Promise(resolve => {
@@ -219,6 +219,21 @@ export function watchLore(token, id, cb) {
   db(token).then(c => { if (!stopped) stop = c.onValue(c.ref(c.db, `tables/${id}/lore`), s => cb(s.val()), () => cb(null)); }).catch(() => cb(null));
   return () => { stopped = true; stop?.(); };
 }
+/** DM: every request waiting for the Shops app, kept up to date. cb({ uid: { rid: req } }). Returns a stop function. */
+export function watchShopQueue(token, id, cb) {
+  let stop = null, stopped = false;
+  db(token).then(c => { if (!stopped) stop = c.onValue(c.ref(c.db, `tables/${id}/shopq`), s => cb(s.val() || {}), () => cb({})); }).catch(() => cb({}));
+  return () => { stopped = true; stop?.(); };
+}
+/* ---------- the DM's own to-do list, for the request box in every app (only the DM reads or writes it)
+   tables/<id>/dmq/<app>   { <id>: { text, who, t } }  e.g. the Shops app's offers waiting for a price */
+export async function setDmQueue(token, id, app, list) { const c = await db(token); await c.set(c.ref(c.db, `tables/${id}/dmq/${app}`), list && Object.keys(list).length ? list : null); }
+export function watchDmQueue(token, id, cb) {
+  let stop = null, stopped = false;
+  db(token).then(c => { if (!stopped) stop = c.onValue(c.ref(c.db, `tables/${id}/dmq`), s => cb(s.val() || {}), () => cb({})); }).catch(() => cb({}));
+  return () => { stopped = true; stop?.(); };
+}
+
 /** DM: answer a request (and clear it). */
 export async function answerShop(token, id, uid, rid, answer) {
   const c = await db(token);
