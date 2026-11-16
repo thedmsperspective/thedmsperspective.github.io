@@ -121,6 +121,60 @@ export function isConsumable(i) {
 const MUNDANE_USED_UP = /^(alchemist'?s fire|acid|antitoxin|holy water|oil|torch|rations?|healer'?s kit|poison|basic poison|candle|caltrops|ball bearings|potion)\b/i;
 export const consumableName = n => MUNDANE_USED_UP.test(String(n || '').trim()) || MAGIC_USED_UP.test(String(n || '').trim());
 
+/* ---------- Containers: a Bag of Holding, a Portable Hole… ----------
+   i.container (set in the Magic Items app) wins: { on, cap (lb; 0 = no limit), counts (contents count toward carried
+   weight), rift (a Bag of Holding inside it, or it inside one, tears a rift to the Astral Plane), pouches }.
+   Otherwise the containers from the book come set up. */
+const BOOK_CONTAINERS = {
+  'bag of holding': { cap: 500, counts: false, rift: true },
+  'portable hole': { cap: 0, counts: false, rift: true },
+  'handy haversack': { counts: false, rift: true, pouches: [{ id: 'l', name: 'Left pouch', cap: 20 }, { id: 'r', name: 'Right pouch', cap: 20 }, { id: 'c', name: 'Main pouch', cap: 80 }] },
+  "heward's handy haversack": 'handy haversack',
+  'efficient quiver': { counts: false, rift: false, pouches: [{ id: 'a', name: 'Arrows and bolts', count: 60 }, { id: 'j', name: 'Javelins', count: 18 }, { id: 'b', name: 'Bows and spears', count: 6 }] },
+};
+const plainName = n => String(n || '').toLowerCase().replace(/\([^)]*\)/g, '').trim();
+export function containerOf(i) {
+  if (!i) return null;
+  if (i.container && typeof i.container === 'object') {
+    const x = i.container; if (x.on === false) return null;
+    return { cap: Math.max(0, Number(x.cap) || 0), counts: !!x.counts, rift: !!x.rift, pouches: Array.isArray(x.pouches) && x.pouches.length ? x.pouches : null };
+  }
+  let b = BOOK_CONTAINERS[plainName(i.name)];
+  if (typeof b === 'string') b = BOOK_CONTAINERS[b];
+  return b ? { cap: b.cap || 0, counts: !!b.counts, rift: !!b.rift, pouches: b.pouches || null } : null;
+}
+
+/* ---------- Charges, and once-a-day uses ----------
+   i.charges (set in the Magic Items app) wins: { max, rec ('Dawn' | 'Long rest' | 'Short rest' | 'None'), regain (dice
+   like "1d6 + 1", a number, or "all"), last (what happens when the last charge is used) }. { max: 0 } switches it off.
+   Otherwise it's read from the description: "This wand has 7 charges… regains 1d6 + 1 expended charges daily at dawn",
+   or "can't be used again until the next dawn" (once a day). */
+const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, twenty: 20, fifty: 50 };
+const numOf = s => (/^\d+$/.test(s) ? Number(s) : WORDS[String(s).toLowerCase()] || 0);
+export function chargesOf(i) {
+  if (!i) return null;
+  if (i.charges && typeof i.charges === 'object') {
+    const x = i.charges, max = Math.max(0, Math.floor(Number(x.max) || 0));
+    return max ? { max, rec: x.rec || 'Dawn', regain: String(x.regain || 'all'), last: String(x.last || '') } : null;
+  }
+  const d = String(i.desc || '').replace(/\s+/g, ' ');
+  const m = /\bhas (\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|fifty) charges?\b/i.exec(d);
+  const when = /\bdawn\b/i.test(d) ? 'Dawn' : /\blong rest\b/i.test(d) ? 'Long rest' : /\bshort rest\b/i.test(d) ? 'Short rest' : 'None';
+  if (m) {
+    const g = /\bregains? (all(?: of)? (?:its|their) )?(?:(\d+d\d+(?:\s*[+-]\s*\d+)?|\d+) )?(?:expended |spent )?charges?\b/i.exec(d);
+    const regain = !g ? (when === 'None' ? '' : 'all') : g[1] ? 'all' : (g[2] || 'all').replace(/\s+/g, ' ');
+    // the last-charge rule, with the sentence after it when that's the roll ("On a 1, the wand crumbles…")
+    const ss = d.split(/(?<=[.!?])\s+/), li = ss.findIndex(s => /\blast charge\b/i.test(s));
+    const last = li < 0 ? '' : [ss[li], /^on an? \d/i.test(ss[li + 1] || '') ? ss[li + 1] : ''].join(' ').trim();
+    return { max: numOf(m[1]), rec: g || when !== 'None' ? when : 'None', regain, last };
+  }
+  // once a day: "can't be used again until the next dawn" and the like
+  const once = /\b(?:can(?:no|')t|can not|cannot) (?:be used|use (?:it|this|that)(?: property| feature| action)?|do so|be activated|activate it) again until (?:the next dawn|you finish a (long|short) rest)/i.exec(d)
+    || /\bonce per day\b|\bonce a day\b|\bonce each day\b/i.exec(d);
+  if (once) return { max: 1, rec: once[1] ? `${once[1][0].toUpperCase()}${once[1].slice(1)} rest` : 'Dawn', regain: 'all', last: '' };
+  return null;
+}
+
 /* ---------- Magic Items: what a character holds (never what it's worth) ---------- */
 export const weightLb = w => { const m = /([\d.]+)\s*lb/i.exec(String(w || '')); return m ? Number(m[1]) : 0; };
 export function attuneText(i) {
@@ -153,6 +207,9 @@ export function miView(mi, seed, holder) {
       attune: attuneText(i), needsAttune: i.attune?.mode === 'required', attuned: !!x.attuned, desc: i.desc || '', weight: weightLb(i.weight), fx,
       // used up when used: a stack (×qty), and the uses the Magic Items app has already counted
       ...(isConsumable(i) ? { consumable: true, qty: Math.max(1, Number(x.qty) || 1), usedIds: (x.usedIds || []).slice(-30) } : {}),
+      // a Bag of Holding and the like; charges or a once-a-day use
+      ...(containerOf(i) ? { container: containerOf(i) } : {}),
+      ...(chargesOf(i) ? { charges: chargesOf(i) } : {}),
     };
   }).filter(Boolean);
   return { items: list, limit: Number(holder.limit) || 3, held: held.length };

@@ -69,8 +69,41 @@ async function onClick(e) {
 function charRequest(ch, key, rid, req) {
   const id = `c:${key.slice(0, 8)}:${rid}`;
   if (!req) { items.delete(id); hidden.delete(id); draw(); return; }
+  const who = String(req.who || ch.name || 'A player').slice(0, 60);
+  // magic items to take out of the Magic Items app (it does it, the next time it's open): c/<key>/gone/<id>
+  const gone = async (cids, why) => L.cput(key, `gone/${rid}`, { cids: cids.map(String).slice(0, 4), why: String(why).slice(0, 120), who, t: Date.now() });
+  if (req.kind === 'rift') {
+    // a Bag of Holding put inside a Portable Hole (or the like). The player wasn't warned: this one is yours to play out.
+    const a = String(req.a || 'a Bag of Holding').slice(0, 60), b = String(req.b || 'another extradimensional space').slice(0, 60);
+    items.set(id, {
+      kind: 'Astral rift', t: Number(req.t) || Date.now(),
+      html: `<b>${esc(who)}</b> put ${esc(a)} inside ${esc(b)}. That opens a gate to the Astral Plane: both are destroyed, and any creature within 10 feet is pulled through.`,
+      actions: [{ a: 'yes', label: 'Destroy both', cls: 'ok' }, { a: 'no', label: 'Let it be', cls: 'no' }],
+      run: async x => {
+        if (x === 'yes') await gone(Array.isArray(req.cids) ? req.cids : [], 'an Astral rift');
+        await L.cput(key, `ans/${rid}`, { ok: x === 'yes', t: Date.now() });
+        await L.cput(key, `ask/${rid}`, null);
+      },
+    });
+    hidden.delete(id); draw(); return;
+  }
+  if (req.kind === 'destroy') {
+    // the last charge used, and the d20 came up 1
+    const what = String(req.name || 'a magic item').slice(0, 60);
+    items.set(id, {
+      kind: 'Magic item', t: Number(req.t) || Date.now(),
+      html: `<b>${esc(who)}</b> says ${esc(what)} was destroyed (its last charge was used, and the roll came up 1).`,
+      actions: [{ a: 'yes', label: 'Approve', cls: 'ok' }, { a: 'no', label: 'Deny', cls: 'no' }],
+      run: async x => {
+        if (x === 'yes') await gone([req.cid], 'its last charge');
+        await L.cput(key, `ans/${rid}`, { ok: x === 'yes', t: Date.now() });
+        await L.cput(key, `ask/${rid}`, null);
+      },
+    });
+    hidden.delete(id); draw(); return;
+  }
   if (req.kind !== 'ammo') return;
-  const who = String(req.who || ch.name || 'A player').slice(0, 60), what = String(req.name || 'ammunition').slice(0, 60);
+  const what = String(req.name || 'ammunition').slice(0, 60);
   items.set(id, {
     kind: 'Ammunition', t: Number(req.t) || Date.now(),
     html: `<b>${esc(who)}</b> recovered ${esc(what)}: ${esc(dieName(req.from))} → <b>${esc(dieName(req.to))}</b>`,
