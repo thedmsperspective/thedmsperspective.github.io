@@ -276,7 +276,7 @@ export async function writeAppdata(token, name, data) {
 /* ---------- campaigns ---------- */
 const emptySuite = () => ({ app: 'dmp-suite', v: 1, campaigns: [], current: { id: '', at: 0 }, settings: {}, clock: {} });
 // Phase 3: table-wide settings (each { v, at }) and each campaign's in-game clock ({ now: minutes, at })
-export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off', notches: 'off', notchMax: '3,5,7,1,5,9,15,21,4,15', ammo: 'count' };
+export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off', notches: 'off', notchMax: '3,5,7,1,5,9,15,21,4,15', ammo: 'count', levelLock: 'off' };
 // notches: wear and tear on weapons and armor ('on'/'off'); notchMax: how many notches break an item, in NOTCH_KINDS order
 export const NOTCH_KINDS = ['light', 'medium', 'heavy', 'shield', 'weapon', 'mlight', 'mmedium', 'mheavy', 'mshield', 'mweapon'];
 /** The table's notch limits: { light, medium, heavy, shield, weapon, mlight, … } */

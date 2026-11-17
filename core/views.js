@@ -14,6 +14,19 @@ const withText = fx => fx.map(e => ({ ...e, txt: describe(e) }));
 // A disease shows once symptoms start (on its own), or while incubating only if the DM revealed it. Only what's
 // affecting the character right now: every effect in force at the current stage (stages build on each other),
 // never the stages still to come, the save DC, or how their saves have gone.
+/* ---------- Loot the DM gave this character (Session Notes' Loot tab). Never its true value: only what they were told
+   (an appraisal the DM revealed, which may not be the truth). Coins are their share. The sheet adds each find once. */
+export function lootView(sn, pc) {
+  const out = [];
+  for (const l of sn?.loot || []) {
+    if (l.deleted || !l.given) continue;
+    if (l.kind === 'coins') { const share = l.given.shares?.[pc.id]; if (share) out.push({ id: l.id, coins: share, place: l.place || '' }); continue; }
+    if (l.given.to !== pc.id) continue;
+    out.push({ id: l.id, name: l.name || 'Something', sec: l.sec || 'treasure', wt: Number(l.wt) || 0, qty: Math.max(1, Number(l.qty) || 1), desc: l.desc || '', eqId: l.eqId || '', shown: l.shown || '' });
+  }
+  return out;
+}
+
 export function snView(sn, pc) {
   if (!pc) return null;
   const dis = new Map((sn?.diseases || []).map(d => [d.id, d]));
@@ -24,6 +37,8 @@ export function snView(sn, pc) {
     pcId: pc.id,
     deaths: (pc.deaths || []).length,
     favorSpent: !!pc.favor?.spent,
+    levelOk: Number(pc.levelOk) || 0, // when the DM last allowed a level up (Table Rules: When I allow it)
+    loot: lootView(sn, pc),
     survival: sv.hunger != null ? { hunger: sv.hunger, thirst: sv.thirst, fatigue: sv.fatigue } : null,
     diseases: cases.map(cs => {
       const d = dis.get(cs.diseaseId) || {};
