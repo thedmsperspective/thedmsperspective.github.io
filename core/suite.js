@@ -276,7 +276,12 @@ export async function writeAppdata(token, name, data) {
 }
 
 /* ---------- campaigns ---------- */
-const emptySuite = () => ({ app: 'dmp-suite', v: 1, campaigns: [], current: { id: '', at: 0 }, settings: {}, clock: {} });
+const emptySuite = () => ({ app: 'dmp-suite', v: 1, campaigns: [], current: { id: '', at: 0 }, tcur: {}, settings: {}, clock: {} });
+/* Tables and campaigns go together. A campaign belongs to the table it was picked at (tableId), each table remembers
+   its own current campaign (tcur), and Table Rules are kept per table (settings keyed "<tableId>:<rule>").
+   A campaign not tied to a table yet can be picked at any table, which ties it there. Rules a table hasn't set
+   yet are the ones you had before tables had their own (plain "<rule>" keys). */
+const tableIdNow = () => (typeof localStorage === 'undefined' ? '' : currentTable()?.id || '');
 // Phase 3: table-wide settings (each { v, at }) and each campaign's in-game clock ({ now: minutes, at })
 export const SETTING_DEFAULTS = { spellMode: 'slots', initiative: 'standard', leveling: 'xp', edition: '2014', abilMethods: 'roll,array,pointbuy', pickNext: 'off', monsterSaves: 'off', notches: 'off', notchMax: '3,5,7,1,5,9,15,21,4,15', ammo: 'count', levelLock: 'off' };
 // notches: wear and tear on weapons and armor ('on'/'off'); notchMax: how many notches break an item, in NOTCH_KINDS order
@@ -299,15 +304,36 @@ function mergeSuite(a, b) {
   for (const c of [...(a?.campaigns || []), ...(b?.campaigns || [])]) {
     if (!c?.id) continue;
     const have = byId.get(c.id);
-    if (!have || (c.updatedAt || 0) > (have.updatedAt || 0)) byId.set(c.id, { id: c.id, name: c.name || '', deleted: !!c.deleted, updatedAt: c.updatedAt || 0 });
+    const tie = (c.tableAt || 0) > (have?.tableAt || 0) ? { tableId: c.tableId || '', tableAt: c.tableAt } : have?.tableAt ? { tableId: have.tableId || '', tableAt: have.tableAt } : {};
+    // the table a campaign belongs to has its own clock, so renaming it in an app that doesn't know tables keeps it
+    if (!have || (c.updatedAt || 0) > (have.updatedAt || 0)) byId.set(c.id, { id: c.id, name: c.name || '', deleted: !!c.deleted, updatedAt: c.updatedAt || 0, ...tie });
+    else if (tie.tableAt) byId.set(c.id, { ...have, ...tie });
   }
   out.campaigns = [...byId.values()];
   const ca = a?.current || {}, cb = b?.current || {};
   out.current = (cb.at || 0) > (ca.at || 0) ? { id: cb.id || '', at: cb.at || 0 } : { id: ca.id || '', at: ca.at || 0 };
+  out.tcur = mergeKeyed(a?.tcur, b?.tcur);
   out.settings = mergeKeyed(a?.settings, b?.settings);
   out.clock = mergeKeyed(a?.clock, b?.clock);
   return out;
 }
+/** The campaign this table is on: the one last picked here, else one tied to it, else (no table yet) the old one */
+function tableCurrent(s, tid = tableIdNow()) {
+  const live = s.campaigns.filter(c => !c.deleted);
+  if (!tid) return { ...s.current };
+  const ok = c => c && (!c.tableId || c.tableId === tid);
+  const moved = Number(currentTable()?.at) || 0; // moving to this table counts as picking its campaign
+  const t = s.tcur?.[tid];
+  if (t && ok(live.find(c => c.id === t.id))) return { id: t.id, at: Math.max(t.at || 0, moved) };
+  const mine = live.find(c => c.tableId === tid);
+  if (mine) return { id: mine.id, at: moved };
+  const g = live.find(c => c.id === s.current.id);
+  if (ok(g)) return { id: g.id, at: s.current.at || 0 }; // nothing tied to this table yet: carry on with the campaign you were on
+  const free = live.find(c => !c.tableId);
+  return { id: free?.id || '', at: moved };
+}
+// What apps are given: current is this table's current campaign
+function view(s) { return { ...s, current: tableCurrent(s) }; }
 function tidy(s) {
   const live = s.campaigns.filter(c => !c.deleted);
   if (!live.some(c => c.id === s.current.id)) s.current = { id: live[0]?.id || '', at: s.current.at || 0 };
@@ -323,14 +349,14 @@ export async function loadSuite(token) {
   if (!s || s.app !== 'dmp-suite') {
     const sn = await readAppdata(token, SN_FILE).catch(e => { if (e.auth) throw e; return null; });
     const camps = (sn?.campaigns || []).filter(c => c?.id && !c.deleted);
-    if (!camps.length) return tidy(mergeSuite(cacheGet(SUITE_CACHE), null));
+    if (!camps.length) return view(tidy(mergeSuite(cacheGet(SUITE_CACHE), null)));
     const newest = [...camps].sort((x, y) => (y.updatedAt || y.createdAt || 0) - (x.updatedAt || x.createdAt || 0))[0];
     s = { ...emptySuite(), campaigns: camps.map(c => ({ id: c.id, name: c.name || '', updatedAt: c.updatedAt || c.createdAt || 1 })), current: { id: newest.id, at: 1 } };
     await writeAppdata(token, SUITE_FILE, s);
   }
   s = tidy(mergeSuite(cacheGet(SUITE_CACHE), s));
   cacheSet(SUITE_CACHE, s);
-  return s;
+  return view(s);
 }
 
 /**
@@ -343,8 +369,21 @@ export async function saveSuite(token, patch = {}) {
   const now = Date.now();
   const mine = emptySuite();
   mine.campaigns = (patch.campaigns || []).map(c => ({ ...c, updatedAt: c.updatedAt || now }));
-  if (patch.current) mine.current = { id: patch.current, at: now };
-  for (const [k, v] of Object.entries(patch.settings || {})) mine.settings[k] = { v, at: patch.settingsAt || now };
+  const tid = tableIdNow();
+  if (patch.current) {
+    mine.current = { id: patch.current, at: now };
+    if (tid) {
+      // picked at this table: it's this table's campaign now (one tied to another table is never taken from it)
+      mine.tcur[tid] = { id: patch.current, at: now };
+      const c = cachedSuite().campaigns.find(x => x.id === patch.current);
+      if (c && !c.tableId && !mine.campaigns.some(x => x.id === c.id)) mine.campaigns.push({ ...c, tableId: tid, tableAt: now });
+      // just made (its name comes with the app's next campaign list): tie it here already
+      if (!c && !mine.campaigns.some(x => x.id === patch.current)) mine.campaigns.push({ id: patch.current, name: '', deleted: false, updatedAt: 1, tableId: tid, tableAt: now });
+      for (const x of mine.campaigns) if (x.id === patch.current && !x.tableId && !c?.tableId) { x.tableId = tid; x.tableAt = now; }
+    }
+  }
+  // Table Rules belong to the table this device is at
+  for (const [k, v] of Object.entries(patch.settings || {})) mine.settings[tid ? `${tid}:${k}` : k] = { v, at: patch.settingsAt || now };
   for (const [id, m] of Object.entries(patch.clock || {})) mine.clock[id] = { now: Number(m) || 0, at: now };
   // Offline: keep the change on this device; it goes up with the next save that reaches Drive
   const local = tidy(mergeSuite(cacheGet(SUITE_CACHE), mine));
@@ -353,14 +392,17 @@ export async function saveSuite(token, patch = {}) {
   const merged = tidy(mergeSuite(remote?.app === 'dmp-suite' ? remote : emptySuite(), local));
   await writeAppdata(token, SUITE_FILE, merged);
   cacheSet(SUITE_CACHE, merged);
-  return merged;
+  return view(merged);
 }
 
 /** The table's settings (spell points or slots, Active or standard initiative, XP or milestone), with when each was set. */
 export function tableSettings() {
-  const st = cachedSuite().settings || {};
+  const st = cacheGet(SUITE_CACHE)?.settings || {}, tid = tableIdNow();
   const out = { ...SETTING_DEFAULTS, at: {} };
-  for (const k of Object.keys(SETTING_DEFAULTS)) if (st[k]) { out[k] = st[k].v; out.at[k] = st[k].at || 0; }
+  for (const k of Object.keys(SETTING_DEFAULTS)) {
+    const x = (tid && st[`${tid}:${k}`]) || st[k]; // this table's own choice, else the one from before
+    if (x) { out[k] = x.v; out.at[k] = x.at || 0; }
+  }
   return out;
 }
 /** A campaign's in-game time, in minutes (the current campaign if none is given), or null if not known yet. */
@@ -371,8 +413,12 @@ export function campaignClock(campaignId) {
 }
 
 /** What this device last knew, without going to Drive. */
-export function cachedSuite() { return tidy(mergeSuite(cacheGet(SUITE_CACHE), null)); }
-export function campaigns() { return cachedSuite().campaigns.filter(c => !c.deleted); }
+export function cachedSuite() { return view(tidy(mergeSuite(cacheGet(SUITE_CACHE), null))); }
+/** The campaigns at this device's table (and any not tied to a table yet); every campaign with { all: true } */
+export function campaigns(opts = {}) {
+  const tid = tableIdNow();
+  return cachedSuite().campaigns.filter(c => !c.deleted && (opts.all || !tid || !c.tableId || c.tableId === tid));
+}
 export function currentCampaign() {
   const s = cachedSuite();
   return s.campaigns.find(c => c.id === s.current.id && !c.deleted) || null;

@@ -424,9 +424,12 @@ function showWho() {
 
 // ---------- the current campaign, for every app ----------
 function renderCampaigns() {
-  const list = core.campaigns(), cur = core.currentCampaign();
-  $('campaign').hidden = !list.length || core.tableRole() === 'player'; // the campaign is the DM's to choose
-  $('campSel').innerHTML = list.map(c => `<option value="${esc(c.id)}"${cur?.id === c.id ? ' selected' : ''}>${esc(c.name || 'Unnamed campaign')}</option>`).join('');
+  // the campaigns at this table (and any not tied to a table yet: picking one ties it to this table)
+  const list = core.campaigns(), cur = core.currentCampaign(), dmAtTable = core.tableRole() === 'dm';
+  const none = !list.length && dmAtTable && core.campaigns({ all: true }).length;
+  $('campaign').hidden = (!list.length && !none) || core.tableRole() === 'player'; // the campaign is the DM's to choose
+  $('campSel').innerHTML = none ? '<option value="" selected disabled>No campaign at this table yet: start one in Session Notes</option>'
+    : (cur ? '' : '<option value="" selected disabled>Pick this table\'s campaign</option>') + list.map(c => `<option value="${esc(c.id)}"${cur?.id === c.id ? ' selected' : ''}>${esc(c.name || 'Unnamed campaign')}</option>`).join('');
 }
 async function showCampaigns() {
   renderCampaigns(); // what this device last knew, straight away
@@ -444,7 +447,7 @@ $('campSel').addEventListener('change', async e => {
   if (!t) { note('Sign in first, then pick the campaign again.'); renderCampaigns(); return; }
   try {
     await core.saveSuite(t, { current: e.target.value });
-    note(`Switched to ${core.currentCampaign()?.name || 'that campaign'}. Each app follows the next time it syncs.`);
+    note(`Switched to ${core.currentCampaign()?.name || 'that campaign'}${core.currentTable()?.id ? `, the campaign for ${core.currentTable().name || 'this table'}` : ''}. Each app follows the next time it syncs.`);
   } catch (err) { note(`Couldn't switch campaigns: ${err.message}`); renderCampaigns(); }
 });
 
@@ -510,7 +513,7 @@ function renderTable(t, cur) {
     <div class="trow"><button type="button" class="primary" id="tabInvite">Invite a player</button><button type="button" id="tabNew">New table</button></div>
     <div id="tabLink">${inviteLink ? linkRow(inviteLink) : ''}</div>
     <ul class="people" id="tabPeople"><li><small>Loading players…</small></li></ul>
-    <h2 style="margin-top:14px">Table Rules</h2><div id="tabRules">${rulesHtml()}</div>
+    <h2 style="margin-top:14px">Table Rules <small style="font-weight:400;opacity:.75">for this table only</small></h2><div id="tabRules">${rulesHtml()}</div>
     <div class="trow" style="margin-top:12px"><button type="button" id="tabDelete" class="danger">Delete this table</button></div>`);
   bindRules(t);
   $('tabDelete').onclick = async () => {
@@ -602,7 +605,7 @@ function bindCopy() { if ($('tabCopy')) $('tabCopy').onclick = () => copy($('tab
 function copy(text) { navigator.clipboard?.writeText(text).then(() => note('Invite link copied.'), () => { $('tabLinkText')?.select(); note('Select the link and copy it.'); }); }
 function bindPicker(t) {
   if (!$('tabSel')) return;
-  $('tabSel').onchange = e => { const x = tabs.find(y => y.id === e.target.value); if (x) { T.choose(x); inviteLink = ''; renderApps(); renderCampaigns(); renderTable(t, T.current()); note(`Now using ${x.name}.`); } };
+  $('tabSel').onchange = e => { const x = tabs.find(y => y.id === e.target.value); if (x) { T.choose(x); inviteLink = ''; renderApps(); renderCampaigns(); renderTable(t, T.current()); const k = core.currentCampaign(); note(`Now using ${x.name}${x.role === 'dm' && k ? `, with its campaign ${k.name || 'Unnamed campaign'}` : ''}.`); } };
 }
 async function showJoin(t, j) {
   const [id, code] = j.split('~');

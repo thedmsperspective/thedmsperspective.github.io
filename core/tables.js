@@ -23,7 +23,11 @@ const setLocal = t => { try { if (t) localStorage.setItem(CURRENT, JSON.stringif
 export const current = () => getLocal();
 /** This device's role at its current table: 'dm', 'player', or '' (no table). */
 export const role = () => getLocal()?.role || '';
-export function choose(t) { setLocal(t ? { id: t.id, name: t.name || '', role: t.role, status: t.status || 'approved' } : null); }
+export function choose(t) {
+  const was = getLocal();
+  // at: when this device moved to this table, so every app follows the table's campaign from then on
+  setLocal(t ? { id: t.id, name: t.name || '', role: t.role, status: t.status || 'approved', at: was?.id === t.id ? (was.at || 0) : Date.now() } : null);
+}
 
 let me = null, meTok = '';
 async function db(token) {
