@@ -200,6 +200,8 @@ export async function signOutLong() {
   const key = keeperKey();
   try { localStorage.removeItem(KEEP); } catch { /* */ }
   const t = read(); if (t) forget(t.value);
+  // the live link (tables, fights) forgets this Google account on this device too
+  try { const L = await live(); await L?.forgetIdentity?.(); } catch { /* */ }
   if (KEEPER && key) { try { await keeper('/signout', { key }); } catch { /* offline: it lapses on its own */ } }
 }
 // Keep a fresh pass ready, on any page that loads the core: renew ten minutes before it runs out

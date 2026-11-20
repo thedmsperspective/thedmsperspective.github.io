@@ -25,10 +25,11 @@ export const current = () => getLocal();
 export const role = () => getLocal()?.role || '';
 export function choose(t) { setLocal(t ? { id: t.id, name: t.name || '', role: t.role, status: t.status || 'approved' } : null); }
 
-let me = null;
+let me = null, meTok = '';
 async function db(token) {
   const c = await live.connect(); if (!c) throw new Error("Couldn't reach the live link. Check the connection.");
-  if (!me || !live.who()?.google) me = await live.identify(token);
+  // a different pass (another sign-in, maybe another Google account): check who it is again
+  if (!me || !live.who()?.google || live.who().uid !== me.uid || token !== meTok) { me = await live.identify(token); meTok = me ? token : ''; }
   if (!me) throw new Error("Couldn't sign in to tables with your Google account. Sign out and in again in the launcher.");
   return c;
 }

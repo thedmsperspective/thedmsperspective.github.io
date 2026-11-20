@@ -95,17 +95,38 @@ async function googlePass() {
  * Sign in to the live link as this Google account (tables need a real identity; character channels work either
  * way). accessToken: a Google pass that includes the email permission. Resolves to { uid, email } or null.
  */
+// Which Google account a pass belongs to (asked once per pass)
+const passEmails = new Map();
+async function emailOf(tok) {
+  if (passEmails.has(tok)) return passEmails.get(tok);
+  let e = '';
+  try { const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${tok}` } }); if (r.ok) e = (await r.json())?.email || ''; } catch { /* */ }
+  if (!e) try { const r = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', { headers: { Authorization: `Bearer ${tok}` } }); if (r.ok) e = (await r.json())?.user?.emailAddress || ''; } catch { /* */ }
+  e = e.toLowerCase(); if (e) passEmails.set(tok, e);
+  return e;
+}
 export async function identify(accessToken) {
   const c = await connect(); if (!c) return null;
   const u = c.auth.currentUser;
-  if (u && !u.isAnonymous) return { uid: u.uid, email: u.email || '' };
+  if (u && !u.isAnonymous) {
+    // The live link remembers its Google sign-in on this device. Only keep it if it's the same account as the
+    // pass in hand: after switching Google accounts it would otherwise still be the old one.
+    if (!accessToken) return { uid: u.uid, email: u.email || '' };
+    if ((await emailOf(accessToken)) === String(u.email || '').toLowerCase()) return { uid: u.uid, email: u.email || '' };
+    try { await c.U.signOut(c.auth); } catch { /* */ }
+    log('ready', 'switched Google accounts');
+  }
   if (!accessToken) return null;
   try {
     const cred = c.U.GoogleAuthProvider.credential(null, accessToken);
     const r = await withTimeout(c.U.signInWithCredential(c.auth, cred), 15000, 'Signing in to the live link');
     log('ready', 'signed in as a Google account');
     return { uid: r.user.uid, email: r.user.email || '' };
-  } catch (e) { lastError = e?.message || String(e); log('FAIL', 'identify', lastError); return null; }
+  } catch (e) {
+    lastError = e?.message || String(e); log('FAIL', 'identify', lastError);
+    if (!c.auth.currentUser) try { await c.U.signInAnonymously(c.auth); } catch { /* */ } // character channels keep working
+    return null;
+  }
 }
 /** Who the live link knows this device as: { uid, email, google } or null. */
 export function who() {
