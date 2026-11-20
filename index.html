@@ -425,7 +425,9 @@ function showWho() {
 // ---------- the current campaign, for every app ----------
 function renderCampaigns() {
   // the campaigns at this table (and any not tied to a table yet: picking one ties it to this table)
-  const list = core.campaigns(), cur = core.currentCampaign(), dmAtTable = core.tableRole() === 'dm';
+  const list = core.campaigns(), dmAtTable = core.tableRole() === 'dm';
+  let cur = core.currentCampaign();
+  if (dmAtTable && cur && !cur.tableId) cur = null; // not tied to this table yet: ask, so picking it ties it here
   const none = !list.length && dmAtTable && core.campaigns({ all: true }).length;
   $('campaign').hidden = (!list.length && !none) || core.tableRole() === 'player'; // the campaign is the DM's to choose
   $('campSel').innerHTML = none ? '<option value="" selected disabled>No campaign at this table yet: start one in Session Notes</option>'
